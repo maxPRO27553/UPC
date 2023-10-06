@@ -27,6 +27,7 @@
 #include "ssd1306.h"
 #include <stdio.h>
 
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -67,7 +68,8 @@ static void MX_ADC1_Init(void);
 /* USER CODE BEGIN 0 */
 volatile uint16_t voltage[2] = {4018, 4017};
 volatile uint8_t flag = 0;
-float koef = 0.003996;
+float koef[2] = {0.003928, 0.003969};
+uint8_t count = 0;
 
 /*void us100Delay(msec)
 {
@@ -75,10 +77,9 @@ float koef = 0.003996;
 	  while(__HAL_TIM_GET_COUNTER(&htim2) < msec);
 }
 */
-void displayvolt(uint16_t akb, uint16_t mainvolt, uint8_t cflag)
+void displayvolt(float akbvoltage, float mainvoltage, uint8_t cflag)
 {
-	float akbvoltage = akb * koef,
-		  mainvoltage = mainvolt * koef;
+
 
 	char str[20];
 	sprintf (str,"bat. %1.2f V", akbvoltage);
@@ -127,11 +128,51 @@ void displayvolt(uint16_t akb, uint16_t mainvolt, uint8_t cflag)
 
     // 15 20 125 2, 125 22, 110 22, 110 2 12
 }
+// main 382
+// akb
 
-uint8_t displaycounter(uint8_t count)
+uint8_t UPS(uint8_t cflag, float Volt0, float Volt1)
+{
+	if(cflag == 1)
+	{
+		if(Volt1 < 13.5f )
+			count++;
+		else
+		{
+			count = 0;
+			return 1;
+		}
+
+		if (count > 3)
+		{
+			count = 0;
+			return 0;
+		}
+	}
+	if(cflag == 0)
+		{
+			if(Volt1 > 13.5f )
+				count++;
+			else
+			{
+				count = 0;
+				return 0;
+			}
+
+			if (count > 3)
+			{
+				count = 0;
+				return 1;
+			}
+		}
+
+
+}
+
+/*uint8_t PowerOn(float Volt1)
 {
 
-	if(voltage[0] < voltage[1]-30)
+	if(Volt1 >= 14.0f )
 		count++;
 	else
 	{
@@ -139,13 +180,13 @@ uint8_t displaycounter(uint8_t count)
 		return 0;
 	}
 
-	if (count > 4)
+	if (count > 9)
 	{
 		count = 0;
 		return 1;
 	}
 
-}
+}*/
 /* USER CODE END 0 */
 
 /**
@@ -190,15 +231,21 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
+   float 		ON, OFF, Save;
+
+   ON = 13.4f;
+   OFF = 14.3f;
+   Save = 12.1f;
+   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);
  //  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
-   uint8_t displaycount = 0,
-		   displayflag = 0,
+   uint8_t displayflag = 0,
 		   chargeflag = 0,
 		   //UPC = 0,
    	   	   AkOn = 0,
    	       AkOff = 0,
 		   AkSave = 0;
+   float voltf[2] = {0.0f};
+
 
   while (1)
   {
@@ -206,93 +253,106 @@ int main(void)
 
 	  	  if(flag)
 	  	  {
+
+
 	  		  flag = 0;
 
 			  HAL_ADC_Stop_DMA(&hadc1);
 
-			  chargeflag = displaycounter(displaycount);
+			  voltf[0] = voltage[0] * koef[0];
+			  voltf[1] = voltage[1] * koef[1];
+
+			  chargeflag = UPS(chargeflag, voltf[0], voltf[1]);
 
 			  if(chargeflag == 0)
-				  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
-
-
-			  if(voltage[0] < 3063)
-				  AkSave++;
-			  else
-				  AkSave = 0;
-
-			  if(voltage[0] > 3620)
-				  AkOff++;
-			  else
-				  AkOff = 0;
-
-			  if(voltage[0] < 3392 && chargeflag == 1)
-				  AkOn++;
-			  else
-				  AkOn = 0;
-
-			  if(displayflag > 12)
 			  {
-				  displayvolt(voltage[0], voltage[1], chargeflag);
+				  if (voltf[0] > Save)
+				  {
+					  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
+					  AkSave = 0;
+				  }
+	/*			  if(voltf[1] >= 14.0f )
+					  count++;
+				  else
+				  {
+					  count = 0;
+				  }
+
+				  if (count > 9)
+				  {
+					  count = 0;
+					  chargeflag = 1;
+				  }*/
+				  else
+				  {
+				  	  AkSave++;
+				  }
+				  if(AkSave > 8)
+				  {
+					  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);
+					 AkSave = 10;
+				  }
+
+			  }
+			  if (chargeflag == 1)
+			  {
+				  /*if(voltf[0] > voltf[1] - 1.1f || voltf[1] - volt1buff > 0.7f)
+						  count++;
+					  	  else
+					  	  {
+						  count = 0;
+
+					  }
+
+					  if (count > 3)
+					  {
+						  count = 0;
+						  chargeflag = 0;
+						  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
+
+					  }*/
+
+					  if(voltf[0] > OFF && voltf[1] > 14.5f)
+						  AkOff++;
+					  else
+						  AkOff = 0;
+
+					  if(voltf[0] < ON)
+						  AkOn++;
+					  else
+						  AkOn = 0;
+
+
+
+				  if(AkOn > 49)
+				  {
+					  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
+					  AkOn = 0;
+				  }
+
+				  if(AkOff > 49)
+				  {
+					  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);
+					  AkOff = 0;
+				  }
+
+			  }
+			  if(displayflag > 9)
+			  {
+				  displayvolt(voltf[0], voltf[1], chargeflag);
 				  displayflag = 0;
 			  }
-
-			  if(AkSave > 8)
-			  {
-				  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);
-				  AkSave = 0;
-
-			  }
-
-			  if(AkOn > 49)
-			  {
-				  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
-				  AkOn = 0;
-			  }
-
-			  if(AkOff > 49)
-			  {
-				  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);
-				  AkOff = 0;
-			  }
-
-
-			/*  if(voltage[0] < 3392 && chargeflag == 1) // 13.4v
-				  poweronflag++;
-			  else
-				  poweronflag = 0;
-			  if(voltage[0] > 3607) // 14.25v
-				  powerofflag++;
-			  else
-				  powerofflag = 0;
-			  if(voltage[0] <= 3063) //12.1v
-				  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
-			  else
-				  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
-			  if(displayflag > 12)
-			  {
-	  			  displayvolt(voltage[0], voltage[1], chargeflag);
-	  			  displayflag = 0;
-			  }
-			  if (poweronflag > 105)
-			  {
-				  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
-				  poweronflag =0;
-			  }
-			  if (powerofflag > 105)
-			  {
-				  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);
-				  powerofflag =0;
-			  }*/
-	  			  //something code
+				  //something code
 
 			  voltage[0] = 0;
 	  		  voltage[1] = 0;
+	  		  voltf[0] = 0;
+	  		  voltf[1] = 0;
 	  		  displayflag++;
 			  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)&voltage, 2);
 
 			  HAL_Delay(50);
-			  //us100Delay(1);
+
 
 
 	  	  }
